@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="page-title">Dashboard</h1>
+<div class="stat-grid">
+  <div class="stat"><div class="stat-n">{{ stats.chats }}</div><div class="stat-l">Chats</div></div>
+  <div class="stat"><div class="stat-n">{{ stats.messages }}</div><div class="stat-l">Messages</div></div>
+  <div class="stat"><div class="stat-n">{{ stats.knowledge }}</div><div class="stat-l">Knowledge</div></div>
+  <div class="stat"><div class="stat-n">{{ stats.apis }}</div><div class="stat-l">Active APIs</div></div>
+</div>
+
+<div class="panel">
+  <div class="panel-h">
+    <h2>Recent chats</h2>
+    <a href="{{ url_for('admin.chats') }}">View all</a>
+  </div>
+  <table class="table">
+    <thead><tr><th>Title</th><th>User</th><th>Msgs</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for c in recent %}
+      <tr>
+        <td><a href="{{ url_for('admin.chat_view', chat_id=c.id) }}">{{ c.title }}</a></td>
+        <td>{{ c.user_name or c.user_phone or 'Guest' }}</td>
+        <td>{{ c.message_count }}</td>
+        <td>{{ c.updated_at }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No chats yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

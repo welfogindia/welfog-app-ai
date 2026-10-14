@@ -1,0 +1,25 @@
+{% extends "admin/base.html" %}
+{% block title %}Chat{% endblock %}
+{% block content %}
+<div class="page-h-row">
+  <div>
+    <a class="back" href="{{ url_for('admin.chats') }}">← Back</a>
+    <h1 class="page-title">{{ chat.title }}</h1>
+    <p class="muted">{{ chat.user_name or 'Guest' }} · {{ chat.user_phone or 'no phone' }} · user_id={{ chat.user_id or '—' }}</p>
+  </div>
+</div>
+<div class="chat-thread">
+  {% for m in messages %}
+  <div class="bubble {{ m.role }}">
+    <div class="bubble-role">{{ m.role }}</div>
+    <div class="bubble-text">{{ m.content }}</div>
+    {% if m.ui %}
+    <pre class="bubble-ui">{{ m.ui | tojson(indent=2) }}</pre>
+    {% endif %}
+    <div class="bubble-time">{{ m.created_at }}</div>
+  </div>
+  {% else %}
+  <p class="muted">No messages</p>
+  {% endfor %}
+</div>
+{% endblock %}

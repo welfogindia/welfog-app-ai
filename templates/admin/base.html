@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Admin{% endblock %} · Welfog AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/admin.css" />
+</head>
+<body class="admin-body">
+  {% if session.get('admin_id') %}
+  <aside class="admin-side">
+    <div class="brand">Welfog AI <span>Admin</span></div>
+    <nav>
+      <a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint=='admin.dashboard' %}active{% endif %}">Dashboard</a>
+      <a href="{{ url_for('admin.chats') }}" class="{% if 'chat' in (request.endpoint or '') %}active{% endif %}">Chat history</a>
+      <a href="{{ url_for('admin.knowledge') }}" class="{% if 'knowledge' in (request.endpoint or '') %}active{% endif %}">Knowledge</a>
+      <a href="{{ url_for('admin.apis') }}" class="{% if 'api' in (request.endpoint or '') %}active{% endif %}">API registry</a>
+      <a href="{{ url_for('admin.settings') }}" class="{% if request.endpoint=='admin.settings' %}active{% endif %}">AI settings</a>
+      <a href="/" target="_blank">Open chat UI</a>
+      <a href="{{ url_for('admin.logout') }}" class="logout">Logout</a>
+    </nav>
+    <div class="side-user">{{ admin_user or session.get('admin_user') }}</div>
+  </aside>
+  {% endif %}
+  <main class="admin-main {% if not session.get('admin_id') %}full{% endif %}">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for cat, msg in messages %}
+            <div class="flash flash-{{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

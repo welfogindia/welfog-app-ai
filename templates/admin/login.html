@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <form class="login-card" method="post" action="{{ url_for('admin.login_post') }}">
+    <h1>Welfog AI Admin</h1>
+    <p class="muted">Manage knowledge, APIs & chat history</p>
+    <label>Username</label>
+    <input name="username" required autocomplete="username" />
+    <label>Password</label>
+    <input type="password" name="password" required autocomplete="current-password" />
+    <button type="submit">Login</button>
+    <p class="hint">Default: admin / admin123</p>
+  </form>
+</div>
+{% endblock %}

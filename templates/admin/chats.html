@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% block title %}Chats{% endblock %}
+{% block content %}
+<h1 class="page-title">Chat history</h1>
+<div class="panel">
+  <table class="table">
+    <thead><tr><th>Title</th><th>Phone</th><th>User ID</th><th>Msgs</th><th>Updated</th><th></th></tr></thead>
+    <tbody>
+      {% for c in chats %}
+      <tr>
+        <td><a href="{{ url_for('admin.chat_view', chat_id=c.id) }}">{{ c.title }}</a></td>
+        <td>{{ c.user_phone or '—' }}</td>
+        <td>{{ c.user_id or '—' }}</td>
+        <td>{{ c.message_count }}</td>
+        <td>{{ c.updated_at }}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin.chat_delete', chat_id=c.id) }}" onsubmit="return confirm('Delete this chat?')">
+            <button class="btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No chats stored yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

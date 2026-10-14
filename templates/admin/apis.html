@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% block title %}APIs{% endblock %}
+{% block content %}
+<div class="page-h-row">
+  <h1 class="page-title">API registry</h1>
+  <a class="btn" href="{{ url_for('admin.apis_new') }}">+ Add API</a>
+</div>
+<p class="muted">Yahan nayi APIs add karo (Welfog / Reels / koi bhi). AI unhe tools ki tarah call karega — code change ki zarurat nahi.</p>
+<div class="panel">
+  <table class="table">
+    <thead><tr><th>Name</th><th>Tool</th><th>Method</th><th>Auth</th><th>Active</th><th></th></tr></thead>
+    <tbody>
+      {% for a in apis %}
+      <tr>
+        <td>{{ a.name }}</td>
+        <td><code>{{ a.tool_name }}</code></td>
+        <td>{{ a.method }}</td>
+        <td>{{ a.auth_mode }}</td>
+        <td>{% if a.is_active %}Yes{% else %}No{% endif %}</td>
+        <td class="actions">
+          <a href="{{ url_for('admin.apis_edit', api_id=a.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('admin.apis_delete', api_id=a.id) }}" onsubmit="return confirm('Delete API?')">
+            <button class="btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No custom APIs yet — built-in Welfog tools already work</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

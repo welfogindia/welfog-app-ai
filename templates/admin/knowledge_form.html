@@ -1,0 +1,20 @@
+{% extends "admin/base.html" %}
+{% block title %}{% if item %}Edit{% else %}New{% endif %} knowledge{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin.knowledge') }}">← Back</a>
+<h1 class="page-title">{% if item %}Edit knowledge{% else %}Add knowledge{% endif %}</h1>
+<form class="form" method="post" action="{{ url_for('admin.knowledge_save') }}">
+  {% if item %}<input type="hidden" name="id" value="{{ item.id }}" />{% endif %}
+  <label>Title</label>
+  <input name="title" required value="{{ item.title if item else '' }}" />
+  <label>Category</label>
+  <input name="category" value="{{ item.category if item else 'company' }}" placeholder="company / policy / support / product" />
+  <label>Content</label>
+  <textarea name="content" rows="12" required placeholder="Company facts, policies, FAQs, product rules...">{{ item.content if item else '' }}</textarea>
+  <div class="form-row">
+    <label><input type="checkbox" name="is_active" {% if not item or item.is_active %}checked{% endif %} /> Active</label>
+    <label>Priority <input type="number" name="priority" value="{{ item.priority if item else 0 }}" style="width:90px" /></label>
+  </div>
+  <button type="submit" class="btn">Save</button>
+</form>
+{% endblock %}

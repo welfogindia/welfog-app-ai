@@ -1,0 +1,61 @@
+{% extends "admin/base.html" %}
+{% block title %}{% if api %}Edit{% else %}New{% endif %} API{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('admin.apis') }}">← Back</a>
+<h1 class="page-title">{% if api %}Edit API{% else %}Register API{% endif %}</h1>
+<form class="form" method="post" action="{{ url_for('admin.apis_save') }}">
+  {% if api %}<input type="hidden" name="id" value="{{ api.id }}" />{% endif %}
+
+  <label>Display name</label>
+  <input name="name" required value="{{ api.name if api else '' }}" placeholder="Reels feed" />
+
+  <label>Tool name (OpenAI function, snake_case, unique)</label>
+  <input name="tool_name" required value="{{ api.tool_name if api else '' }}" placeholder="get_reels_feed" />
+
+  <label>Description for AI (kab use kare)</label>
+  <textarea name="description" rows="3" required placeholder="Fetch latest reels for the user. Use when user asks about reels/videos.">{{ api.description if api else '' }}</textarea>
+
+  <div class="form-row">
+    <div>
+      <label>Method</label>
+      <select name="method">
+        {% set m = api.method if api else 'GET' %}
+        {% for opt in ['GET','POST','PUT','PATCH','DELETE'] %}
+        <option value="{{ opt }}" {% if m==opt %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Auth mode</label>
+      <select name="auth_mode">
+        {% set am = api.auth_mode if api else 'none' %}
+        <option value="none" {% if am=='none' %}selected{% endif %}>none (public)</option>
+        <option value="bearer_session" {% if am=='bearer_session' %}selected{% endif %}>bearer_session (OTP login token)</option>
+      </select>
+    </div>
+    <div>
+      <label>Sort</label>
+      <input type="number" name="sort_order" value="{{ api.sort_order if api else 0 }}" />
+    </div>
+  </div>
+
+  <label>URL (placeholders: {user_id} {access_token} {phone} {arg_name})</label>
+  <input name="url" required value="{{ api.url if api else '' }}" placeholder="https://welfogapi.welfog.com/api/v2/example/{user_id}" />
+
+  <label>Query params JSON schema</label>
+  <textarea name="query_params_json" rows="6" placeholder='[{"name":"page","type":"integer","required":false,"description":"Page number"},{"name":"q","type":"string","required":true,"description":"Search"}]'>{{ api.query_params_json if api else '' }}</textarea>
+
+  <label>Headers JSON (optional)</label>
+  <textarea name="headers_json" rows="3" placeholder='{"Accept":"application/json"}'>{{ api.headers_json if api else '' }}</textarea>
+
+  <label>Body template JSON (POST/PUT, optional)</label>
+  <textarea name="body_template_json" rows="4" placeholder='{"user_id":"{user_id}","q":"{q}"}'>{{ api.body_template_json if api else '' }}</textarea>
+
+  <label>Response hint for AI (optional)</label>
+  <textarea name="response_hint" rows="2" placeholder="Return list of reels with title and thumbnail">{{ api.response_hint if api else '' }}</textarea>
+
+  <label><input type="checkbox" name="is_active" {% if not api or api.is_active %}checked{% endif %} /> Active</label>
+
+  <button type="submit" class="btn">Save API</button>
+</form>
+{% endblock %}

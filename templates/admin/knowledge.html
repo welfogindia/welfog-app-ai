@@ -1,0 +1,32 @@
+{% extends "admin/base.html" %}
+{% block title %}Knowledge{% endblock %}
+{% block content %}
+<div class="page-h-row">
+  <h1 class="page-title">Knowledge base</h1>
+  <a class="btn" href="{{ url_for('admin.knowledge_new') }}">+ Add knowledge</a>
+</div>
+<p class="muted">Jo yahan save karoge, AI har reply me use karega — baar baar batane ki zarurat nahi.</p>
+<div class="panel">
+  <table class="table">
+    <thead><tr><th>Title</th><th>Category</th><th>Priority</th><th>Active</th><th></th></tr></thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>{{ it.title }}</td>
+        <td>{{ it.category }}</td>
+        <td>{{ it.priority }}</td>
+        <td>{% if it.is_active %}Yes{% else %}No{% endif %}</td>
+        <td class="actions">
+          <a href="{{ url_for('admin.knowledge_edit', kid=it.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('admin.knowledge_delete', kid=it.id) }}" onsubmit="return confirm('Delete?')">
+            <button class="btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No knowledge yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
