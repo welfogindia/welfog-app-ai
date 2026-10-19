@@ -28,6 +28,16 @@ def _flask_store() -> dict | None:
         return None
 
 
+_SERVER_SESSIONS_MAX = 5000
+
+
+def _prune_server_sessions() -> None:
+    if len(_SERVER_SESSIONS) > _SERVER_SESSIONS_MAX:
+        keys_to_remove = list(_SERVER_SESSIONS.keys())[:1000]
+        for k in keys_to_remove:
+            _SERVER_SESSIONS.pop(k, None)
+
+
 def _visitor_key_of(data: dict | None) -> str:
     return str((data or {}).get("visitor_key") or "").strip()
 
@@ -37,6 +47,7 @@ def commit_session(data: dict | None = None) -> None:
     vk = _visitor_key_of(blob)
     if vk:
         _SERVER_SESSIONS[vk] = blob
+        _prune_server_sessions()
 
 
 def _hydrate_from_server(data: dict) -> dict:
@@ -80,6 +91,7 @@ def _touch() -> None:
     vk = _visitor_key_of(_store())
     if vk and not getattr(_tls, "bound", False):
         _SERVER_SESSIONS[vk] = dict(_store())
+        _prune_server_sessions()
 
 
 def snapshot_session() -> dict:
@@ -99,6 +111,12 @@ def bind_thread_session(data: dict | None) -> None:
 
 
 def unbind_thread_session() -> None:
+    _tls.bound = False
+    _tls.data = None
+
+
+def reset_thread_session() -> None:
+    """Clear thread-local session data to ensure no state leaks between requests."""
     _tls.bound = False
     _tls.data = None
 

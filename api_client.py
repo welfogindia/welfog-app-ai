@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 from typing import Any
 
@@ -11,10 +12,18 @@ from config import MAX_TOOL_RESULT_CHARS, REQUEST_TIMEOUT, WELFOG_API_BASE
 from session import session
 
 
+class _BlockAllCookies(http.cookiejar.CookiePolicy):
+    return_ok = set_ok = domain_return_ok = path_return_ok = lambda self, *args, **kwargs: False
+    netscape = True
+    rfc2965 = hide_cookie2 = False
+
+
 class WelfogAPI:
     def __init__(self, base_url: str = WELFOG_API_BASE):
         self.base_url = base_url.rstrip("/")
         self.http = requests.Session()
+        # Strict user isolation: never persist or leak cookies between requests or users
+        self.http.cookies.set_policy(_BlockAllCookies())
         self.http.headers.update(
             {
                 "Accept": "application/json",
@@ -24,11 +33,12 @@ class WelfogAPI:
             }
         )
 
-    def _auth_headers(self) -> dict:
+    def _auth_headers(self, token: str | None = None) -> dict:
         headers = {}
-        if session.access_token:
-            headers["Authorization"] = f"Bearer {session.access_token}"
-            headers["Cookie"] = f"token={session.access_token}"
+        tok = (token or session.access_token or "").strip()
+        if tok:
+            headers["Authorization"] = f"Bearer {tok}"
+            headers["Cookie"] = f"token={tok}"
         return headers
 
     def request(
@@ -39,10 +49,15 @@ class WelfogAPI:
         params: dict | None = None,
         json_body: dict | None = None,
         auth: bool = False,
+        token: str | None = None,
         trim: bool = True,
     ) -> Any:
         url = path if path.startswith("http") else f"{self.base_url}{path}"
-        headers = self._auth_headers() if auth else {}
+        headers = self._auth_headers(token=token) if (auth or token) else {}
+        try:
+            self.http.cookies.clear()
+        except Exception:
+            pass
         try:
             resp = self.http.request(
                 method.upper(),
@@ -67,10 +82,11 @@ class WelfogAPI:
         path: str,
         params: dict | None = None,
         auth: bool = False,
+        token: str | None = None,
         *,
         trim: bool = True,
     ) -> Any:
-        return self.request("GET", path, params=params, auth=auth, trim=trim)
+        return self.request("GET", path, params=params, auth=auth, token=token, trim=trim)
 
     def post(
         self,
@@ -78,11 +94,12 @@ class WelfogAPI:
         json_body: dict | None = None,
         params: dict | None = None,
         auth: bool = False,
+        token: str | None = None,
         *,
         trim: bool = True,
     ) -> Any:
         return self.request(
-            "POST", path, params=params, json_body=json_body or {}, auth=auth, trim=trim
+            "POST", path, params=params, json_body=json_body or {}, auth=auth, token=token, trim=trim
         )
 
     def _slim_item(self, item: Any) -> Any:

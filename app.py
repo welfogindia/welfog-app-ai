@@ -16,6 +16,7 @@ from formatter import extract_ui_from_history, strip_redundant_lists
 from session import (
     bind_thread_session,
     commit_session,
+    reset_thread_session,
     session as global_session,
     snapshot_session,
     unbind_thread_session,
@@ -88,6 +89,9 @@ def _owns_row(row: dict | None) -> bool:
     # the WebView still has the previous visitor_key cookie.
     if _uid_set(ident["user_id"]) and _uid_set(uid) and not _same_uid(ident["user_id"], uid):
         return False
+    # If phone numbers are set and different, never allow access across different users
+    if ident["phone"] and phone and ident["phone"] != phone:
+        return False
     if _same_uid(ident["user_id"], uid):
         return True
     if ident["phone"] and phone and ident["phone"] == phone:
@@ -108,7 +112,7 @@ def _apply_app_login(
 ) -> dict | None:
     """Verify shop token and bind it to this AI browser session."""
     token = str(token or "").strip()
-    if not token or uid in (None, "", 0, "0", "guest"):
+    if not token or uid in (None, "", 0, "0", "guest", "null", "none"):
         return None
     current = str(global_session.user_id or "")
     incoming = str(uid)
@@ -122,21 +126,40 @@ def _apply_app_login(
 
     from api_client import api
 
+    # Pass token explicitly so verification does not depend on unverified global_session
     snap = api.post(
         "/api/v2/get-user-by-access_token",
         json_body={"access_token": token, "userId": uid},
+        token=token,
     )
-    if not isinstance(snap, dict) or snap.get("result") is not True:
+
+    verified = False
+    snap_data: dict = {}
+    if isinstance(snap, dict):
+        if snap.get("result") is True or snap.get("status") in (200, "200"):
+            verified = True
+        inner = snap.get("data") if isinstance(snap.get("data"), dict) else (snap.get("user") if isinstance(snap.get("user"), dict) else snap)
+        if isinstance(inner, dict):
+            snap_data = inner
+            if inner.get("id") or inner.get("user_id"):
+                verified = True
+
+    if not verified:
+        print(f"[auth] app-login verification failed for uid={uid}: {snap}")
         return None
 
-    user_id = snap.get("id") or snap.get("user_id") or uid
+    user_id = snap_data.get("id") or snap_data.get("user_id") or uid
+    resolved_name = str(snap_data.get("name") or name or "").strip()
+    resolved_email = str(snap_data.get("email") or email or "").strip()
+    resolved_phone = str(snap_data.get("phone") or phone or "").strip()
+
     payload = {
         "access_token": token,
         "user": {
             "id": user_id,
-            "name": snap.get("name") or name or "",
-            "email": snap.get("email") or email or "",
-            "phone": snap.get("phone") or phone or "",
+            "name": resolved_name,
+            "email": resolved_email,
+            "phone": resolved_phone,
         },
     }
     switch = _uid_set(current) and not _same_uid(current, user_id)
@@ -145,7 +168,7 @@ def _apply_app_login(
     else:
         global_session.set_from_login(payload)
     commit_session()
-    print(f"[auth] app-login user_id={user_id} new_session={force_new or switch}")
+    print(f"[auth] app-login success user_id={user_id} phone={resolved_phone} new_session={force_new or switch}")
     return global_session.summary()
 
 
@@ -260,27 +283,88 @@ def _ensure_db():
         app._db_ready = False
 
 
+def _extract_request_auth() -> tuple[str, str, str, str, str, bool]:
+    """Extract auth from headers, query params, or bearer tokens."""
+    token = (
+        request.headers.get("X-Welfog-Access-Token")
+        or request.headers.get("X-Access-Token")
+        or ""
+    ).strip()
+    if not token:
+        auth_hdr = (request.headers.get("Authorization") or "").strip()
+        if auth_hdr.lower().startswith("bearer "):
+            token = auth_hdr[7:].strip()
+
+    uid = (
+        request.headers.get("X-Welfog-User-Id")
+        or request.headers.get("X-User-Id")
+        or request.headers.get("X-UserId")
+        or ""
+    ).strip()
+
+    name = (request.headers.get("X-Welfog-Name") or request.headers.get("X-User-Name") or "").strip()
+    phone = (request.headers.get("X-Welfog-Phone") or request.headers.get("X-User-Phone") or "").strip()
+    email = (request.headers.get("X-Welfog-Email") or request.headers.get("X-User-Email") or "").strip()
+    reset = (request.headers.get("X-Welfog-Reset-Session") or "").strip() == "1"
+
+    # Fallback to query parameters (in case mobile WebViews drop headers on redirect)
+    if not token:
+        token = (
+            request.args.get("token")
+            or request.args.get("access_token")
+            or request.args.get("auth_token")
+            or request.args.get("authToken")
+            or ""
+        ).strip()
+    if not uid:
+        uid = (
+            request.args.get("user_id")
+            or request.args.get("userId")
+            or request.args.get("uid")
+            or request.args.get("id")
+            or ""
+        ).strip()
+    if not name:
+        name = (request.args.get("name") or request.args.get("user_name") or request.args.get("userName") or "").strip()
+    if not phone:
+        phone = (request.args.get("phone") or request.args.get("user_phone") or request.args.get("mobile") or "").strip()
+    if not email:
+        email = (request.args.get("email") or request.args.get("user_email") or "").strip()
+    if not reset:
+        reset = str(request.args.get("reset") or request.args.get("force_new") or "").strip().lower() in ("1", "true")
+
+    return token, uid, name, phone, email, reset
+
+
 @app.before_request
 def _flutter_embed_login():
-    """Flutter WebView sends auth headers on the first HTML request so
-    the page boots as the current app user instead of the leftover cookie."""
-    if request.method not in ("GET", "HEAD"):
+    """Flutter WebView sends auth headers or query params so the page
+    boots as the current app user instead of an old leftover cookie."""
+    token, uid, name, phone, email, reset = _extract_request_auth()
+
+    # Guest or explicit logout from app
+    if uid in ("guest", "logout", "0", 0):
+        if global_session.is_authenticated:
+            global_session.clear()
+            commit_session()
         return
-    path = request.path or ""
-    if path not in ("/", ""):
-        return
-    token = (request.headers.get("X-Welfog-Access-Token") or "").strip()
-    uid = (request.headers.get("X-Welfog-User-Id") or "").strip()
+
     if not token or not uid:
         return
-    reset = (request.headers.get("X-Welfog-Reset-Session") or "").strip() == "1"
+
     _apply_app_login(
         token,
         uid,
-        name=request.headers.get("X-Welfog-Name") or "",
-        phone=request.headers.get("X-Welfog-Phone") or "",
+        name=name,
+        phone=phone,
+        email=email,
         force_new=reset,
     )
+
+
+@app.teardown_request
+def _teardown_request_cleanup(exception=None):
+    reset_thread_session()
 
 
 @app.get("/")
@@ -293,28 +377,45 @@ def auth_me():
     return jsonify(global_session.summary())
 
 
-@app.post("/api/auth/app-login")
+@app.route("/api/auth/app-login", methods=["GET", "POST"])
 def auth_app_login():
-    """Flutter account login. Creates a NEW AI session when the shop user changes."""
-    data = request.get_json(silent=True) or {}
-    token = str(data.get("access_token") or "").strip()
-    uid = data.get("user_id")
-    force_new = data.get("force_new_session")
-    if force_new is None:
-        force_new = True
+    """Flutter account login. Supports both JSON POST and GET query parameters."""
+    data = {}
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+
+    token, uid, name, phone, email, reset = _extract_request_auth()
+    if not token and data:
+        token = str(data.get("access_token") or data.get("token") or "").strip()
+    if not uid and data:
+        uid = data.get("user_id") or data.get("userId") or data.get("uid")
+    if not name and data:
+        name = str(data.get("name") or "")
+    if not phone and data:
+        phone = str(data.get("phone") or "")
+    if not email and data:
+        email = str(data.get("email") or "")
+    force_new = data.get("force_new_session") if (data and "force_new_session" in data) else True
+
     summary = _apply_app_login(
         token,
         uid,
-        name=str(data.get("name") or ""),
-        phone=str(data.get("phone") or ""),
-        email=str(data.get("email") or ""),
-        force_new=bool(force_new),
+        name=name,
+        phone=phone,
+        email=email,
+        force_new=bool(force_new or reset),
     )
     if not summary:
         err = "missing_credentials" if not token or uid in (None, "", 0, "0", "guest") else "invalid_token"
         code = 400 if err == "missing_credentials" else 401
         return jsonify({"ok": False, "authenticated": False, "error": err}), code
     return jsonify({"ok": True, "session": summary})
+
+
+@app.route("/api/auth/sync", methods=["GET", "POST"])
+def auth_sync():
+    """Lightweight sync endpoint for mobile apps."""
+    return auth_app_login()
 
 
 @app.post("/api/auth/send-otp")

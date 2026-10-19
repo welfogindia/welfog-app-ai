@@ -1925,6 +1925,36 @@
   // Boot — URL ?chat_id= first, then saved id, else new chat
   (async () => {
     const splashDone = runMobileSplash();
+
+    // Clean URL query params if auth tokens were passed so they do not linger in address bar / history
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const authKeys = ["token", "access_token", "authToken", "auth_token"];
+      let hasAuth = false;
+      for (const k of authKeys) {
+        if (sp.has(k)) {
+          sp.delete(k);
+          hasAuth = true;
+        }
+      }
+      if (hasAuth) {
+        sp.delete("userId");
+        sp.delete("user_id");
+        sp.delete("uid");
+        sp.delete("mobile");
+        sp.delete("phone");
+        sp.delete("user_phone");
+        sp.delete("userName");
+        sp.delete("user_name");
+        sp.delete("name");
+        sp.delete("reset");
+        sp.delete("force_new");
+        const cleanSearch = sp.toString();
+        const cleanUrl = window.location.pathname + (cleanSearch ? "?" + cleanSearch : "") + window.location.hash;
+        window.history.replaceState({ chat_id: getChatIdFromUrl() || null }, "", cleanUrl);
+      }
+    } catch (_) {}
+
     const fromUrl = getChatIdFromUrl();
     if (fromUrl) {
       await loadChat(fromUrl);
@@ -1933,6 +1963,41 @@
     }
     await splashDone;
   })();
+
+  // Listen for auth messages from Flutter/Android InAppWebView postMessage
+  window.addEventListener("message", async (event) => {
+    try {
+      let data = event.data;
+      if (typeof data === "string" && (data.startsWith("{") || data.startsWith("["))) {
+        data = JSON.parse(data);
+      }
+      if (!data || typeof data !== "object") return;
+      if (data.type === "WELFOG_AUTH" || data.type === "welfog_auth" || data.action === "login") {
+        const token = data.token || data.access_token || data.authToken;
+        const uid = data.user_id || data.userId || data.uid || data.id;
+        if (token && uid) {
+          const res = await fetch("/api/auth/app-login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              access_token: token,
+              user_id: uid,
+              name: data.name || data.userName || data.user_name || "",
+              phone: data.phone || data.userPhone || data.user_phone || data.mobile || "",
+              email: data.email || data.userEmail || data.user_email || "",
+              force_new_session: true,
+            }),
+          });
+          if (res.ok) {
+            await refreshChatList();
+          }
+        }
+      } else if (data.type === "WELFOG_LOGOUT" || data.action === "logout") {
+        await fetch("/api/auth/logout", { method: "POST" });
+        await goHome();
+      }
+    } catch (_) {}
+  });
 
   window.addEventListener("popstate", async () => {
     const id = getChatIdFromUrl();
